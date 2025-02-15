@@ -19,7 +19,7 @@ notify() {
 }
 
 main() {
-  local untracked uncommited unpushed line
+  local modified untracked uncommited unpushed line
 
   if ! [[ "${PWD}" == "${DOTDIR}" ]]; then
     pushd "${DOTDIR}" || die "Directory does not exist"
@@ -38,6 +38,11 @@ main() {
   untracked="$(git ls-files . --exclude-standard --others | wc -l)"
   if [ "${untracked}" -gt 0 ]; then
     notify "You have ${untracked} untracked files"
+  fi
+
+  modified="$(git ls-files . --exclude-standard --modified | wc -l)"
+  if [ "${modified}" -gt 0 ]; then
+    notify "You have ${modified} modified files"
   fi
 
   uncommited="$(git diff --cached --name-only | wc -l)"
