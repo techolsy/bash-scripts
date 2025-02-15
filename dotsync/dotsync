@@ -29,7 +29,7 @@ main() {
     if [ -f "${HOME}${line}" ]; then
       cp "${HOME}${line}" "${DOTDIR}${line}" || die "Failed to copy file ${line}"
     elif [ -d "${HOME}${line}" ]; then
-      cp -r "${HOME}${line}" "${DOTDIR}${line}" || die "Failed to copy directory ${line}"
+      cp -r "${HOME}${line}" "${DOTDIR}${line%/*}" || die "Failed to copy directory ${line}"
     else
       die "${HOME}${line} is not a file/directory"
     fi
