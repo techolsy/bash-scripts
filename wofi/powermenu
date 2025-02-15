@@ -1,0 +1,69 @@
+#!/usr/bin/env -S bash
+
+set -eu
+
+die() {
+  local arg="${1}"
+
+  printf "%s\n" "${arg}"
+  exit 1
+}
+
+lock() {
+  case "${DESKTOP_SESSION}" in
+    "plasma")
+      loginctl lock-session
+      ;;
+    "hyprland")
+      hyprlock
+      ;;
+    *)
+      die "Unable to lock session"
+      ;;
+  esac
+}
+
+logout() {
+  case "${DESKTOP_SESSION}" in
+    "hyprland")
+      hyrpctl dispatch exit
+      ;;
+    *)
+      die "Unable to logout"
+      ;;
+  esac
+}
+
+main() {
+  local select options option
+  options=(
+    "poweroff"
+    "suspend"
+    "logout"
+    "lock"
+  )
+
+  select="$(for option in "${options[@]}"; do
+    printf "%s\n" "${option}"
+  done | wofi --dmenu)"
+
+  case "${select}" in
+    "poweroff")
+      systemctl poweroff
+      ;;
+    "suspend")
+      systemctl suspend
+      ;;
+    "logout")
+      logout
+      ;;
+    "lock")
+      lock
+      ;;
+    *)
+      die "unknown option: ${select}"
+      ;;
+  esac
+}
+
+main

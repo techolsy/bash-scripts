@@ -1,0 +1,14 @@
+#!/usr/bin/env -S bash
+
+set -eu
+
+main() {
+  local unit
+
+  while read -r unit; do
+    notify-send -t 15000 "systemd-monit" "Failed unit: ${unit}"
+    sleep 1
+  done < <(systemctl --user --failed | grep failed | cut -d ' ' -f 2)
+}
+
+main

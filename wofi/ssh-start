@@ -1,0 +1,66 @@
+#!/usr/bin/env -S bash
+
+set -eu
+
+die() {
+  local arg="${1}"
+
+  printf "%s\n" "${arg}"
+  exit 1
+}
+
+notify() {
+  local arg="$1"
+
+  notify-send -t 3000 "ssh start" "$arg"
+  exit 0
+}
+
+check_deps() {
+  local name deps
+  deps=(
+    "wofi"
+    "ghostty"
+    "notify-send"
+    "cut"
+    "uniq"
+  )
+
+  for name in "${deps[@]}"; do
+    command -v "$name" 1>/dev/null || die "Missing dependency: $name"
+  done
+}
+
+main() {
+  local line host file servers known_hosts
+  servers=()
+  known_hosts=(
+    "$HOME/.ssh/known_hosts"
+    "$HOME/.ssh/generated_hosts"
+  )
+
+  check_deps
+
+  for file in "${known_hosts[@]}"; do
+    while read -r line; do
+      servers+=("$line")
+    done < <(< "$file" cut -d ' ' -f 1 | uniq)
+  done
+
+  host=$(for server in "${servers[@]}"; do
+    echo "$server"
+  done | wofi --dmenu)
+
+  if [[ "$host" == "" ]]; then
+    exit 0
+  fi
+
+  if ! [[ "${servers[*]}" =~ $host ]]; then
+    notify "Cant find host $host"
+  fi
+
+  ghostty -e ssh "$host" || notify "Failed to connect to $host"
+  notify "Exited $host"
+}
+
+main

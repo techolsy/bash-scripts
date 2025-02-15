@@ -1,0 +1,9 @@
+[Unit]
+Description=Timer to run lego wrapper
+
+[Timer]
+OnCalendar=05:30
+RandomizedDelaySec=30min
+
+[Install]
+WantedBy=timers.target

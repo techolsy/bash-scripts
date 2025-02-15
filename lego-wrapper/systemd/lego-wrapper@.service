@@ -1,0 +1,9 @@
+[Unit]
+Description=run lego wrapper
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/lego-wrapper %i
+
+[Install]
+WantedBy=default.target

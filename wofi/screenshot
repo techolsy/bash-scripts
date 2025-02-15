@@ -1,0 +1,30 @@
+#!/usr/bin/env -S bash
+
+set -eu
+
+die() {
+  local arg="${1}"
+
+  printf "%s\n" "${arg}"
+  exit 1
+}
+
+main() {
+  local selected option options
+  options=(
+    "active"
+    "screen"
+    "output"
+    "area"
+    "window"
+    "anyting"
+  )
+
+  selected="$(for option in "${options[@]}"; do
+    printf "%s\n" "${option}"
+  done | wofi --dmenu)"
+
+  grimshot --notify savecopy "${selected}" || die "Bad option ${selected}"
+}
+
+main

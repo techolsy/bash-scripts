@@ -1,0 +1,6 @@
+[Service]
+ExecStart=%h/.local/bin/systemd-monit
+Type=oneshot
+
+[Install]
+WantedBy=multi-user.target

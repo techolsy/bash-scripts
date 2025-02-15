@@ -1,0 +1,214 @@
+#!/usr/bin/env -S bash
+
+set -eu
+
+domain="${1}"
+
+err() {
+  local arg="${1}"
+
+  printf "%s\n" "${arg}"
+  exit 1
+}
+
+die() {
+  local timestamp
+  local arg="${1}"
+  timestamp="$(date +"%Y/%m/%d %H:%M:%S")"
+
+  printf "%s [ERROR] %s\n" "${timestamp}" "${arg}"
+  exit 1
+}
+
+info() {
+  local timestamp
+  local arg="${1}"
+  timestamp="$(date +"%Y/%m/%d %H:%M:%S")"
+
+  printf "%s [INFO] %s\n" "${timestamp}" "${arg}"
+}
+
+check_deps() {
+  local name
+  local deps=(
+    "openssl"
+    "lego"
+    "netstat"
+    "systemctl"
+    "grep"
+    "awk"
+    "cut"
+    "head"
+    "date"
+  )
+
+  for name in "${deps[@]}"; do
+    command -v "${name}" 1>/dev/null || die "Missing dependency: ${name}"
+  done
+}
+
+acme_conf() {
+  local line key value
+
+  if [ ! -f "/usr/local/.lego/conf/${domain}" ]; then
+    die "File does not exist: /usr/local/.lego/conf/${domain}"
+  fi
+
+  source "/usr/local/.lego/conf/${domain}"
+
+  if [ -z "${ACME_SERVER+x}" ]; then
+    die "/usr/local/.lego/conf/${domain}: ACME_SERVER is unset"
+  elif [ -z "${ACME_EMAIL+x}" ]; then
+    die "/usr/local/.lego/conf/${domain}: ACME_EMAIL is unset"
+  elif [ -z "${KEY_TYPE+x}" ]; then
+    die "/usr/local/.lego/conf/${domain}: KEY_TYPE is unset"
+  elif [ -z "${CHALLENGE+x}" ]; then
+    die "/usr/local/.lego/conf/${domain}: CHALLENGE is unset"
+  fi
+
+  while read -r line; do
+    IFS== read -r key value <<< "${line}" || die "Failed to read key and value"
+
+    if ! [[ "${key}" =~ ^(ACME_SERVER|ACME_EMAIL|KEY_TYPE|CHALLENGE|WEBROOT|UNIT_RELOAD|UNIT_RESTART|DEPLOY_CRT|DEPLOY_KEY)$ ]]; then
+      die "/usr/local/.lego/conf/${domain}: Invalid option ${key}"
+    fi
+
+    if [ -z "${value}" ]; then
+      die "/usr/local/.lego/conf/${domain}: Missing value for ${key}"
+    fi
+  done < <(cat /usr/local/.lego/conf/"${domain}")
+}
+
+stop_service() {
+  local service s_pid
+
+  if [[ "${CHALLENGE}" == "tls" ]]; then
+    s_pid="$(netstat -tlpn | grep -w '443' | grep -w 'tcp' | awk '{print $7}' | cut -d / -f 1)"
+    if [ -z "${s_pid}" ]; then
+      s_pid="$(netstat -tlpn | grep -w '443' | grep -w 'tcp6' | awk '{print $7}' | cut -d / -f 1)"
+    fi
+  else
+    s_pid="$(netstat -tlpn | grep -w '80' | grep -w 'tcp' | awk '{print $7}' | cut -d / -f 1)"
+    if [ -z "${s_pid}" ]; then
+      s_pid="$(netstat -tlpn | grep -w '80' | grep -w 'tcp6' | awk '{print $7}' | cut -d / -f 1)"
+    fi
+  fi
+
+  if [ -n "${s_pid}" ]; then
+    service="$(systemctl status "${s_pid}" 2>/dev/null | head -n 1 | awk '{print $2}')"
+
+    if [ -z "${service}" ]; then
+      if [[ "${CHALLENGE}" == "tls" ]]; then
+        err "pid: ${s_pid} is blocking port 443 and we don't know what to do"
+      else
+        err "pid: ${s_pid} is blocking port 80 and we don't know what to do"
+      fi
+    fi
+
+    systemctl stop "${service}" || err "Failed to stop ${service}"
+
+    printf "%s\n" "$service"
+  fi
+}
+
+fix_cert() {
+  local options service job cert_fail user mod key
+  service=""
+  job="${1}"
+  cert_fail=0
+
+  if [ -z "${WEBROOT+x}" ]; then
+    service="$(stop_service)" || die "Failed to stop service with error: $service"
+  fi
+
+  options="--path /usr/local/.lego"
+
+  if [[ "${CHALLENGE}" == "http" ]]; then
+    options="${options} --http"
+  elif [[ "${CHALLENGE}" == "tls" ]]; then
+    options="${options} --tls"
+  else
+    die "Bad CHALLENGE value ${CHALLENGE}"
+  fi
+
+  options="${options} -k $KEY_TYPE -d $domain -s $ACME_SERVER -m $ACME_EMAIL"
+
+  if [ -n "${WEBROOT+x}" ]; then
+    options="${options} --http.webroot ${WEBROOT}"
+  fi
+
+  if [[ "${job}" == "create" ]]; then
+    options="${options} -a run"
+  elif [[ "${job}" == "renew" ]]; then
+    options="${options} renew --no-random-sleep"
+  fi
+
+  lego ${options} || cert_fail=1
+
+  if [ -n "${service}" ]; then
+    systemctl start "${service}" || die "Failed to start ${service}"
+  fi
+
+  if [ "${cert_fail}" -eq 1 ]; then
+    die "Failed to obtain or renew a certificate for ${domain}"
+  fi
+
+  if [ -n "${DEPLOY_CRT+x}" ]; then
+    IFS=, read -r user mod key <<< "${DEPLOY_CRT}" || die "Failed to read DEPLOY_CRT values"
+
+    cp /usr/local/.lego/certificates/"${domain}".crt "${key}" || die "Failed to copy key to ${key}"
+
+    if [[ "${user}" != "none" ]]; then
+      chown "${user}" "${key}" || die "Failed to set owner ${user} on ${key}"
+    fi
+    if [[ "${mod}" != "none" ]]; then
+      chmod "${mod}" "${key}" || die "Failed to chmod ${mod} on ${key}"
+    fi
+  fi
+
+  if [ -n "${DEPLOY_KEY+x}" ]; then
+    IFS=, read -r user mod key <<< "${DEPLOY_KEY}" || die "Failed to read DEPLOY_KEY values"
+
+    cp /usr/local/.lego/certificates/"${domain}".key "${key}" || die "Failed to copy key to ${key}"
+
+    if [[ "${user}" != "none" ]]; then
+      chown "${user}" "${key}" || die "Failed to set owner ${user} on ${key}"
+    fi
+    if [[ "${mod}" != "none" ]]; then
+      chmod "${mod}" "${key}" || die "Failed to chmod ${mod} on ${key}"
+    fi
+  fi
+
+  if [ -n "${UNIT_RELOAD+x}" ]; then
+    systemctl reload "${UNIT_RELOAD}" || die "Failed to reload ${UNIT_RELOAD}"
+  fi
+
+  if [ -n "${UNIT_RESTART+x}" ]; then
+    systemctl restart "${UNIT_RESTART}" || die "Failed to restart ${UNIT_RESTART}"
+  fi
+}
+
+main() {
+  local expiryDays
+
+  check_deps
+  acme_conf
+
+  if [ ! -f "/usr/local/.lego/certificates/${domain}.crt" ]; then
+    info "Certificate does not exist, asking for one"
+    fix_cert "create"
+    info "Certificate obtained"
+    exit 0
+  fi
+
+  expiryDays="$((($(date -d "$(openssl x509 -in /usr/local/.lego/certificates/"${domain}".crt -enddate -noout | cut -d= -f2)" '+%s') - $(date '+%s')) / 86400))"
+  if [ "${expiryDays}" -lt 23 ]; then
+    info "Renewing certificate for ${domain}"
+    fix_cert "renew"
+    info "Certificate renewed for ${domain}"
+  else
+    info "${domain} is not due for renewal"
+  fi
+}
+
+main
