@@ -1,0 +1,54 @@
+#!/usr/bin/env -S bash
+
+set -eu
+
+DOTDIR="${HOME}/git/github/dotfiles"
+
+die() {
+  local arg="${1}"
+
+  printf "%s\n" "${arg}"
+  exit 1
+}
+
+notify() {
+  local arg="${1}"
+
+  notify-send -t 30000 "dotsync" "${arg}"
+  sleep 1
+}
+
+main() {
+  local untracked uncommited unpushed line
+
+  if ! [[ "${PWD}" == "${DOTDIR}" ]]; then
+    pushd "${DOTDIR}" || die "Directory does not exist"
+  fi
+
+  while read -r line; do
+    if [ -f "${HOME}${line}" ]; then
+      cp "${HOME}${line}" "${DOTDIR}${line}" || die "Failed to copy file ${line}"
+    elif [ -d "${HOME}${line}" ]; then
+      cp -r "${HOME}${line}" "${DOTDIR}${line}" || die "Failed to copy directory ${line}"
+    else
+      die "${HOME}${line} is not a file/directory"
+    fi
+  done < <(cat files)
+
+  untracked="$(git ls-files . --exclude-standard --others | wc -l)"
+  if [ "${untracked}" -gt 0 ]; then
+    notify "You have ${untracked} untracked files"
+  fi
+
+  uncommited="$(git diff --cached --name-only | wc -l)"
+  if [ "${uncommited}" -gt 0 ]; then
+    notify "You have ${uncommited} uncommited files"
+  fi
+
+  unpushed=$(git log --branches --not --remotes --simplify-by-decoration --decorate --oneline | wc -l)
+  if [ "${unpushed}" -gt 0 ]; then
+    notify "You have ${unpushed} unpushed commits"
+  fi
+}
+
+main

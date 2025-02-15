@@ -1,0 +1,7 @@
+[Service]
+WorkingDirectory=%h/git/github/dotfiles
+ExecStart=%h/git/github/dotfiles/dotsync
+Type=oneshot
+
+[Install]
+WantedBy=multi-user.target
