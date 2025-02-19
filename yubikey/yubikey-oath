@@ -1,0 +1,49 @@
+#!/usr/bin/env -S bash
+
+set -eu
+
+die() {
+  local arg="${1}"
+
+  printf "%s\n" "${arg}"
+  exit 1
+}
+
+notify() {
+  local arg="${1}"
+
+  notify-send -t 10000 "Yubikey oath" "${arg}"
+  exit 0
+}
+
+check_deps() {
+  local dep deps
+  deps=(
+    "wofi"
+    "ykman"
+    "wl-copy"
+    "pcsc_scan"
+    "notify-send"
+  )
+
+  for dep in "${deps[@]}"; do
+    command -v "${dep}" 1>/dev/null || die "Missing dependency: $dep"
+  done
+}
+
+main() {
+  local account key_code
+
+  check_deps
+  [[ "$(pcsc_scan -r)" == *"Yubico"* ]] ||
+    notify "Yubikey not found"
+
+  account="$(ykman oath accounts list | cut -d : -f 1 | wofi --dmenu)" ||
+    notify "Failed to list accounts" 
+  key_code="$(ykman oath accounts code -s ${account})" ||
+    notify "Failed to generate oath code"
+  wl-copy "${key_code}" && notify "${account} copied to clipboard!"||
+    notify "Failed to copy oath code to clipboard"
+}
+
+main
