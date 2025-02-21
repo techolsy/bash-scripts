@@ -19,7 +19,7 @@ notify() {
 }
 
 main() {
-  local modified untracked uncommited unpushed line
+  local modified untracked uncommited unpushed line file prefix
 
   if ! [[ "${PWD}" == "${DOTDIR}" ]]; then
     pushd "${DOTDIR}" || die "Directory does not exist"
@@ -33,6 +33,17 @@ main() {
     else
       die "${HOME}${line} is not a file/directory"
     fi
+  done < <(cat files)
+
+  while read -r line; do
+    [ -f "${DOTDIR}${line}" ] ||
+      while read -r file; do
+        prefix="${DOTDIR}"
+        file="${file#"${prefix}"}"
+        [ -f "${HOME}${file}" ] ||
+          [ -d "${HOME}${file}" ] ||
+            rm "${DOTDIR}${file}" || die "Failed to delete file: ${DOTDIR}${file}"
+      done < <(find "${DOTDIR}${line}")
   done < <(cat files)
 
   untracked="$(git ls-files . --exclude-standard --others | wc -l)"
