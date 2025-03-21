@@ -1,0 +1,43 @@
+#!/usr/bin/env -S bash
+
+set -eu
+
+die() {
+  local msg="$1"
+
+  printf "%s\n" "$msg"
+  exit 1
+}
+
+notify() {
+  local msg="$1"
+
+  notify-send -t 10000 "update-notifier" "$msg"
+}
+
+check_deps() {
+  local deps dep
+  deps=(
+    "notify-send"
+    "checkupdates"
+  )
+
+  for dep in "${deps[@]}"; do
+    command -v "$dep" 1>/dev/null ||
+      die "Missing dependency: $dep"
+  done
+}
+
+main() {
+  local count
+
+  count=$(checkupdates) ||
+    exit 0
+
+  if [[ "$count" -gt 20 ]]; then
+    notify "You have $count pending updates"
+  fi
+}
+
+check_deps
+main

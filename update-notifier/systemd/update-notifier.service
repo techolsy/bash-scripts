@@ -1,0 +1,6 @@
+[Service]
+ExecStart=update-notifier
+Type=oneshot
+
+[Install]
+WantedBy=multi-user.target
