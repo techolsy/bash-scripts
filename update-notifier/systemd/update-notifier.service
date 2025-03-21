@@ -1,5 +1,5 @@
 [Service]
-ExecStart=update-notifier
+ExecStart=%h/.local/bin/update-notifier
 Type=oneshot
 
 [Install]
