@@ -31,7 +31,7 @@ check_deps() {
 main() {
   local count
 
-  count=$(checkupdates) ||
+  count=$(checkupdates | wc -l) ||
     exit 0
 
   if [[ "$count" -gt 20 ]]; then
