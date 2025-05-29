@@ -47,9 +47,15 @@ main() {
     done < <(< "$file" cut -d ' ' -f 1 | uniq)
   done
 
-  host=$(for server in "${servers[@]}"; do
-    echo "$server"
-  done | wofi --dmenu)
+  if [[ "$XDG_SESSION_TYPE" == "x11" ]]; then
+    host=$(for server in "${servers[@]}"; do
+      echo "$server"
+    done | rofi -dmenu)
+  else
+    host=$(for server in "${servers[@]}"; do
+      echo "$server"
+    done | wofi --dmenu)
+  fi
 
   if [[ "$host" == "" ]]; then
     exit 0
